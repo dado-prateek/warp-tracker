@@ -30,7 +30,7 @@ def decode(ben_string, start_from=0):
         position += 1
         string_start = position
         string_finish = string_start + int(string_len_text)
-        return (ben_string[string_start:string_finish]).decode(), string_finish
+        return (ben_string[string_start:string_finish]), string_finish
 
     elif char == 'i':
         position += 1
@@ -65,12 +65,12 @@ def decode(ben_string, start_from=0):
 
 
 if __name__ == '__main__':
-    assert decode(b'0:')[0] == ''
-    assert decode(b'5:Hello')[0] == 'Hello'
-    assert decode(b'12:Hello World!')[0] == 'Hello World!'
+    assert decode(b'0:')[0] == b''
+    assert decode(b'5:Hello')[0] == b'Hello'
+    assert decode(b'12:Hello World!')[0] == b'Hello World!'
     assert decode(b'i42e')[0] == 42
     assert decode(b'i-1e')[0] == -1
-    assert decode(b'l5:helloe')[0] == ['hello']
-    assert decode(b'l5:hello5:worlde')[0] == ['hello', 'world']
-    assert decode(b'd5:hello5:world2:hil5:hello5:worldee')[0] == {'hello': 'world', 'hi': ['hello', 'world']}
-    assert decode(b'd5:hello5:world2:hil5:hello5:worlde3:hi2l5:hello5:worldee')[0] == {'hello': 'world', 'hi2': ['hello', 'world'], 'hi': ['hello', 'world']}
+    assert decode(b'l5:helloe')[0] == [b'hello']
+    assert decode(b'l5:hello5:worlde')[0] == [b'hello', b'world']
+    assert decode(b'd5:hello5:world2:hil5:hello5:worldee')[0] == {b'hello': b'world', b'hi': [b'hello', b'world']}
+    assert decode(b'd5:hello5:world2:hil5:hello5:worlde3:hi2l5:hello5:worldee')[0] == {b'hello': b'world', b'hi2': [b'hello', b'world'], b'hi': [b'hello', b'world']}
