@@ -19,7 +19,7 @@ logger.setLevel(logging.DEBUG)
 
 PORT = 1717
 BIND_ADDR = '0.0.0.0'
-TORRENT_PATH = os.path.join(os.getcwd(),'torrents')
+TORRENTS_PATH = os.path.join(os.getcwd(), 'torrents')
 
 
 class WarpException(Exception):
@@ -34,12 +34,12 @@ class WarpServer(metaclass=lib.Singleton):
 
     def __init__(self):
         logger.debug('Initializing WarpServer')
-        self.torrents_path = TORRENT_PATH
         self.port = PORT
         self.bind_addr = BIND_ADDR
+        self.torrents_path = TORRENTS_PATH
         self._core = WarpCore()
-        self.read_torrents()
         self._http_server = HTTPServer((self.bind_addr, self.port), WarpServerHTTPRequestHandler)
+        self.read_torrents()
 
     def read_torrents(self):
         try:
@@ -62,7 +62,12 @@ class WarpServer(metaclass=lib.Singleton):
             self._http_server.server_close()
 
     def process_request(self, request):
-        return self._core.process_request(request)
+        if request.path == '/announce':
+            return self._core.announce(request)
+        elif request.path == '/scrape':
+            return self._core.scrape(request)
+        else:
+            return bytes("<h1>Welcome to the WARP BitTorrent tracker!</h1><br /><p>{}</p>".format(request), "utf-8")
 
 
 class WarpServerHTTPRequestHandler(BaseHTTPRequestHandler):
@@ -84,6 +89,7 @@ class WarpServerHTTPRequestHandler(BaseHTTPRequestHandler):
 class WarpCore:
 
     def __init__(self):
+        logger.debug('Initializing WrapCore')
         self.torrents_peers = {}
 
     def add_torrent(self, torrent):
@@ -99,13 +105,11 @@ class WarpCore:
 
         return self.torrents_peers[torrent]
 
-    def process_request(self, request):
-        if request.path == '/announce':
-            pass
-        elif request.path == '/scrape':
-            pass
-        else:
-            return bytes("<h1>Welcome to the WARP BitTorrent tracker!</h1><br /><p>{}</p>".format(request), "utf-8")
+    def announce(self, request):
+        pass
+
+    def scrape(self,request):
+        pass
 
 
 class WarpTorrent:
