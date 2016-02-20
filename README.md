@@ -2,7 +2,8 @@
 
 #### How to run
 * Clone repo:
-```git clone https://github.com/qborg/warp-tracker.git
+```
+git clone https://github.com/qborg/warp-tracker.git
 ```
 
 * Create dir for torrents:
