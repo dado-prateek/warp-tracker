@@ -6,19 +6,18 @@ import logging
 import threading
 
 logger = logging.getLogger(__name__)
-#logger.setLevel(logging.DEBUG)
+# logger.setLevel(logging.DEBUG)
 
 
 class Singleton(type):
+    """ Singleton metaclass """
     _instances = {}
     lock = threading.Lock()
 
     def __call__(cls, *args, **kwargs):
-        logger.debug('Request {} singletone instance '.format(cls.__name__))
+        logger.debug('Request %s singletone instance ', cls.__name__)
         with cls.lock:
             if cls not in cls._instances:
                 logger.debug('Creating new instance')
                 cls._instances[cls] = super().__call__(*args, **kwargs)
         return cls._instances[cls]
-
-
