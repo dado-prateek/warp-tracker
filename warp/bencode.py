@@ -15,7 +15,13 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-def decode(ben_string, start_from=0):
+def decode(ben_string):
+    """ Returns decoded data """
+    return _decode(ben_string)[0]
+
+
+def _decode(ben_string, start_from=0):
+    """ Bencode decode function """
     position = start_from
     char = chr(ben_string[position])
 
@@ -47,7 +53,7 @@ def decode(ben_string, start_from=0):
         follow_char = chr(ben_string[position])
         res = []
         while follow_char != 'e':
-            item, position = decode(ben_string, start_from=position)
+            item, position = _decode(ben_string, start_from=position)
             res.append(item)
             follow_char = chr(ben_string[position])
         return res, position + 1
@@ -57,8 +63,8 @@ def decode(ben_string, start_from=0):
         follow_char = chr(ben_string[position])
         res = {}
         while follow_char != 'e':
-            key, position = decode(ben_string, start_from=position)
-            value, position = decode(ben_string, start_from=position)
+            key, position = _decode(ben_string, start_from=position)
+            value, position = _decode(ben_string, start_from=position)
             res.update({key: value})
             follow_char = chr(ben_string[position])
         return res, position + 1

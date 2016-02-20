@@ -4,6 +4,7 @@ import os
 import logging
 import datetime
 
+from warp import bencode
 from warp.base import Server
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ class WarpCore(Server):
     def add_torrent(self, torrent):
         """ serve torrent """
         if torrent not in self.torrents:
+            logger.debug('Add torrent: {}'.format(torrent.info))
             self.torrents.append(torrent)
 
     def get_torrents(self):
@@ -84,17 +86,10 @@ class Peer(object):
         return self.last_seen > datetime.datetime.now() + alive_time
 
 
-def bdecode(data, end_token=None):
-    """ bencode decode function to read encoded torrent metadata """
-    for token in data:
-        if token == 'd':
-            return {}
-
-
 def read_torrent_info(fpath):
     """ read torrent info from torrent file path """
-    with open(fpath, 'r') as file:
-        return bdecode(file.read())
+    with open(fpath, 'rb') as file:
+        return bencode.decode(file.read())
 
 
 def find_torrent_files(torrents_dir):
