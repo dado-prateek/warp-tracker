@@ -14,5 +14,5 @@ mkdir torrents
 
 * Add some torrents to torrents dir, check config at `warp/config.py` and run via python3:
 ```
-python3 warp/main.py
+PYTHONPATH=. python3 warp/main.py
 ```
