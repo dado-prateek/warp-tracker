@@ -3,6 +3,7 @@
 import os
 import logging
 import datetime
+import hashlib
 
 from warp import bencode
 from warp.base import Server
@@ -21,63 +22,129 @@ class WarpCore(Server):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
-        self.torrents = []
+        self.hashes_torrents = {}
         self.load_torrents()
+        logger.info('Loaded %i torrents', len(self.hashes_torrents))
+        logger.debug(self.hashes_torrents)
 
     def load_torrents(self):
         """ Loading torrents from files """
-        for path in find_torrent_files(self.cfg['TORRENTS_DIR']):
-            torrent = Torrent(read_torrent_info(path))
+        for file_path in find_files(self.cfg['TORRENTS_DIR']):
+            torrent = Torrent.init_from_file(file_path)
             self.add_torrent(torrent)
 
     def add_torrent(self, torrent):
         """ serve torrent """
-        if torrent not in self.torrents:
-            logger.debug('Add torrent: {}'.format(torrent.info))
-            self.torrents.append(torrent)
+        logger.debug('Add torrent %s', torrent)
+        if torrent.info_hash not in self.hashes_torrents:
+            self.hashes_torrents[torrent.info_hash] = torrent
 
     def get_torrents(self):
         """ return serving torrent list """
-        return self.torrents
+        return self.hashes_torrents.values()
 
-    def announce(self):
-        """ Announce response """
-        pass
+    def add_peer_for_hash(self, info_hash, peer):
+        """ Adds peer and requested info_hash to database """
+        self.hashes_torrents[info_hash].add_peer(peer)
 
-    def scrape(self):
-        """ Scrape response """
-        pass
+    def get_peers_for_hash(self, info_hash):
+        return self.hashes_torrents[info_hash].get_peers()
+
+    def announce(self, params):
+        peer = Peer(peer_id=params['peer_id'],
+                    ip=params['host'],
+                    port=params['port'])
+
+        info_hash = params['info_hash']
+        if info_hash in self.hashes_torrents:
+            self.add_peer_for_hash(info_hash, peer)
+            peers = self.get_peers_for_hash(info_hash)
+            response = bencode.encode({
+                b'interval': 60,
+                b'tracker id': b'WarpTracker',
+                b'complete': 0,
+                b'incomplete': len(peers),
+                b'peers': [p.as_bytes_dict for p in peers]
+            })
+            return response
+        else:
+            logger.warning('Unknown info_hash: %s', info_hash)
 
 
 class Torrent(object):
     """ Torrent object """
-    def __init__(self, torrent_info):
-        self.hash = 1
-        self.peers = []
-        self.info = torrent_info
-        self.load()
+    def __init__(self, metafile):
+        self.metafile = metafile
+        self.info_hash = self.create_info_hash()
+        self.peers = set()
+        logger.debug('Init %s', self)
 
-    def load(self):
-        """ init object with self.info """
-        pass
+    @property
+    def info(self):
+        return self.metafile.meta_info[b'info']
 
     def add_peer(self, peer):
-        """ add peer to list of known peers """
-        self.peers.append(peer)
+        self.peers.add(peer)
 
-    def __hash__(self, *args, **kwargs):
-        return self.hash
+    def get_peers(self):
+        return self.peers
+
+    def create_info_hash(self):
+        """ Gets info_hash from torrent """
+        hasher = hashlib.sha1()
+        hasher.update(bencode.encode(self.info))
+        return hasher.digest()
+
+    @classmethod
+    def init_from_file(cls, path):
+        """ Init torrent from file path """
+        return cls(TorrentMetaFile(path))
+
+    def __repr__(self):
+        return 'Torrent({})'.format(self.metafile)
+
+
+class TorrentMetaFile(object):
+    def __init__(self, path):
+        self.path = path
+        self.file_name = os.path.basename(path)
+        self.meta_info = self.read_meta_info()
+        logger.debug('Init %s', self)
+        logger.debug("meta_info: %s", self.meta_info)
+
+    def read_meta_info(self):
+        """ read torrent info from path """
+        try:
+            with open(self.path, 'rb') as file:
+                return bencode.decode(file.read())
+        except:
+            logger.warning("Not a torrent file or file does not exists")
+
+    def __repr__(self):
+        return 'TorrentMetaFile({})'.format(self.path)
 
 
 class Peer(object):
     """ Peer object """
-    def __init__(self, cfg, passkey):
-        self.cfg = cfg
+    def __init__(self, peer_id, ip, port):
         self.last_seen = datetime.datetime.now()
-        self.passkey = passkey
+        self.peer_id = peer_id
+        self.ip = ip
+        self.port = port
+        self.info_hashes = set()
+        logger.debug('Init %s', self)
 
-    def __hash__(self):
-        return self.passkey
+    @property
+    def as_bytes_dict(self):
+        return {
+            b'peer_id': self.peer_id,
+            b'ip': bytes(self.ip, 'utf-8'),
+            b'port': self.port
+        }
+
+    @property
+    def is_seeder(self):
+        return False
 
     @property
     def alive(self):
@@ -85,20 +152,17 @@ class Peer(object):
         alive_time = datetime.timedelta(hours=2)
         return self.last_seen > datetime.datetime.now() + alive_time
 
-
-def read_torrent_info(fpath):
-    """ read torrent info from torrent file path """
-    with open(fpath, 'rb') as file:
-        return bencode.decode(file.read())
+    def __repr__(self):
+        return 'Peer({}, {}, {})'.format(self.peer_id, self.ip, self.port)
 
 
-def find_torrent_files(torrents_dir):
+def find_files(dir_path):
     """ Return list of path to torrent files """
     try:
-        files = os.listdir(torrents_dir)
+        file_names = os.listdir(dir_path)
     except FileNotFoundError:
-        logger.error('Directory does not exists %s', torrents_dir)
+        logger.error('Directory does not exists %s', dir_path)
         exit(1)
 
-    files = [os.path.join(torrents_dir, p) for p in files]
-    return files
+    file_paths = [os.path.join(dir_path, p) for p in file_names]
+    return file_paths

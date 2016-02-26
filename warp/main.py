@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.5
 
 """ Main module of warp-tracker
 distributing under GNU General Public License
@@ -13,12 +13,16 @@ from warp.http_server import WarpHTTPServer
 
 def set_logger():
     """ Setting up logger """
-    root = logging.getLogger()
-    log_handler = logging.StreamHandler()
-    formatter = logging.Formatter(
-        '%(asctime)s %(name)s %(levelname)s %(message)s')
-    log_handler.setFormatter(formatter)
-    root.addHandler(log_handler)
+    try:
+        import coloredlogs
+        coloredlogs.install(level='DEBUG')
+    except ImportError:
+        root = logging.getLogger()
+        log_handler = logging.StreamHandler()
+        formatter = logging.Formatter(
+            '%(asctime)s %(name)s %(levelname)s %(message)s')
+        log_handler.setFormatter(formatter)
+        root.addHandler(log_handler)
 
 
 def run_server():
