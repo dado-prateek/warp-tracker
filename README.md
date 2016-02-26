@@ -12,7 +12,7 @@ cd warp-tracker
 mkdir torrents
 ```
 
-* Add some torrents to torrents dir, check config at `warp/config.py` and run via python3:
+* Create and add some torrents to torrents dir, check config at `warp/config.py` and run via python3.5:
 ```
-PYTHONPATH=. python3 warp/main.py
+PYTHONPATH=. python3.5 warp/main.py
 ```
