@@ -27,7 +27,8 @@ def set_logger():
 
 def run_server():
     """ Init and run server """
-    WarpCore(cfg)
+    core = WarpCore(cfg)
+    core.load_torrents()
     server = WarpHTTPServer(cfg)
     server.serve()
 

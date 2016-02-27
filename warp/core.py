@@ -6,7 +6,7 @@ import datetime
 import hashlib
 
 from warp import bencode
-from warp.base import Server
+from warp.lib import Singleton
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -17,13 +17,12 @@ class NoTorrentFound(Exception):
     pass
 
 
-class WarpCore(Server):
+class WarpCore(metaclass=Singleton):
     """ Core of tracker """
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
         self.hashes_torrents = {}
-        self.load_torrents()
         logger.info('Loaded %i torrents', len(self.hashes_torrents))
         logger.debug(self.hashes_torrents)
 
@@ -31,25 +30,29 @@ class WarpCore(Server):
         """ Loading torrents from files """
         for file_path in find_files(self.cfg['TORRENTS_DIR']):
             torrent = Torrent.init_from_file(file_path)
-            self.add_torrent(torrent)
+            self.add_hash_torrent(torrent.info_hash, torrent)
 
-    def add_torrent(self, torrent):
+    def add_hash_torrent(self, info_hash, torrent):
         """ Serve torrent """
         logger.debug('Add torrent %s', torrent)
-        if torrent.info_hash not in self.hashes_torrents:
-            self.hashes_torrents[torrent.info_hash] = torrent
+        if info_hash not in self.hashes_torrents:
+            self.hashes_torrents[info_hash] = torrent
 
     def get_torrents(self):
-        """ Return serving torrent list """
+        """ Return serving torrent iterable """
         return self.hashes_torrents.values()
+
+    def get_torrent_by_hash(self, info_hash):
+        """ Return torent by info hash """
+        return self.hashes_torrents[info_hash]
 
     def add_peer_for_hash(self, info_hash, peer):
         """ Adds peer and requested info_hash to database """
-        self.hashes_torrents[info_hash].add_peer(peer)
+        self.get_torrent_by_hash(info_hash).add_peer(peer)
 
     def get_peers_for_hash(self, info_hash):
         """ Returns list of peers for given hash """
-        return self.hashes_torrents[info_hash].get_peers()
+        return self.get_torrent_by_hash(info_hash).get_peers()
 
     def announce(self, params):
         """ Announce response. Returns bencoded dictionary """
@@ -84,7 +87,7 @@ class Torrent(object):
 
     @property
     def info(self):
-        """ The info block from meta file """
+        """ Decoded info block from the meta file """
         return self.metafile.meta_info[b'info']
 
     def add_peer(self, peer):
@@ -118,6 +121,10 @@ class TorrentMetaFile(object):
         self.meta_info = self.read_meta_info()
         logger.debug('Init %s', self)
         logger.debug("meta_info: %s", self.meta_info)
+
+    def dump_to_file(self):
+        """ Save meta_info to a file """
+        pass
 
     def read_meta_info(self):
         """ Read torrent info from path """
@@ -166,7 +173,7 @@ class Peer(object):
 
 
 def find_files(dir_path):
-    """ Return list of path to torrent files """
+    """ Return list of paths to torrent files """
     try:
         file_names = os.listdir(dir_path)
     except FileNotFoundError:
