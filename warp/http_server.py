@@ -30,6 +30,7 @@ class ServerRequest(object):
 
 
 class UnknownRequest(ServerRequest):
+    """ Process unknown requests. Generally return 404 """
     def process(self):
         return 'text/plain', bytes('Unknown request', 'utf-8')
 
@@ -42,7 +43,7 @@ class AnnounceRequest(ServerRequest):
         params = {
             'peer_id': self.query[b'peer_id'][0],
             'info_hash': self.query[b'info_hash'][0],
-            'host': self.host,
+            'host': self.host.decode('utf-8'),
             'port': self.query[b'port'][0]
         }
         content_type = 'text/plain'

@@ -34,13 +34,13 @@ class WarpCore(Server):
             self.add_torrent(torrent)
 
     def add_torrent(self, torrent):
-        """ serve torrent """
+        """ Serve torrent """
         logger.debug('Add torrent %s', torrent)
         if torrent.info_hash not in self.hashes_torrents:
             self.hashes_torrents[torrent.info_hash] = torrent
 
     def get_torrents(self):
-        """ return serving torrent list """
+        """ Return serving torrent list """
         return self.hashes_torrents.values()
 
     def add_peer_for_hash(self, info_hash, peer):
@@ -48,25 +48,28 @@ class WarpCore(Server):
         self.hashes_torrents[info_hash].add_peer(peer)
 
     def get_peers_for_hash(self, info_hash):
+        """ Returns list of peers for given hash """
         return self.hashes_torrents[info_hash].get_peers()
 
     def announce(self, params):
+        """ Announce response. Returns bencoded dictionary """
         peer = Peer(peer_id=params['peer_id'],
-                    ip=params['host'],
+                    host=params['host'],
                     port=params['port'])
 
         info_hash = params['info_hash']
         if info_hash in self.hashes_torrents:
             self.add_peer_for_hash(info_hash, peer)
             peers = self.get_peers_for_hash(info_hash)
-            response = bencode.encode({
+            response = {
                 b'interval': 60,
                 b'tracker id': b'WarpTracker',
                 b'complete': 0,
                 b'incomplete': len(peers),
                 b'peers': [p.as_bytes_dict for p in peers]
-            })
-            return response
+            }
+            logger.debug('Response: %s', response)
+            return bencode.encode(response)
         else:
             logger.warning('Unknown info_hash: %s', info_hash)
 
@@ -81,12 +84,15 @@ class Torrent(object):
 
     @property
     def info(self):
+        """ The info block from meta file """
         return self.metafile.meta_info[b'info']
 
     def add_peer(self, peer):
+        """ Add peer to torrent """
         self.peers.add(peer)
 
     def get_peers(self):
+        """ Returns iterable with peers """
         return self.peers
 
     def create_info_hash(self):
@@ -105,6 +111,7 @@ class Torrent(object):
 
 
 class TorrentMetaFile(object):
+    """ Class represents torrent metafile """
     def __init__(self, path):
         self.path = path
         self.file_name = os.path.basename(path)
@@ -113,12 +120,12 @@ class TorrentMetaFile(object):
         logger.debug("meta_info: %s", self.meta_info)
 
     def read_meta_info(self):
-        """ read torrent info from path """
+        """ Read torrent info from path """
         try:
             with open(self.path, 'rb') as file:
                 return bencode.decode(file.read())
-        except:
-            logger.warning("Not a torrent file or file does not exists")
+        except FileNotFoundError:
+            logger.warning("File does not exists")
 
     def __repr__(self):
         return 'TorrentMetaFile({})'.format(self.path)
@@ -126,34 +133,36 @@ class TorrentMetaFile(object):
 
 class Peer(object):
     """ Peer object """
-    def __init__(self, peer_id, ip, port):
+    def __init__(self, peer_id, host, port):
         self.last_seen = datetime.datetime.now()
         self.peer_id = peer_id
-        self.ip = ip
+        self.host = host
         self.port = port
         self.info_hashes = set()
         logger.debug('Init %s', self)
 
     @property
     def as_bytes_dict(self):
+        """ Returns peer dictionary model for announce response """
         return {
             b'peer_id': self.peer_id,
-            b'ip': bytes(self.ip, 'utf-8'),
+            b'ip': self.host,
             b'port': self.port
         }
 
     @property
     def is_seeder(self):
+        """ Check if peer is seeder """
         return False
 
     @property
     def alive(self):
-        """ check alive state of peer """
+        """ Check alive state of peer """
         alive_time = datetime.timedelta(hours=2)
         return self.last_seen > datetime.datetime.now() + alive_time
 
     def __repr__(self):
-        return 'Peer({}, {}, {})'.format(self.peer_id, self.ip, self.port)
+        return 'Peer({}, {}, {})'.format(self.peer_id, self.host, self.port)
 
 
 def find_files(dir_path):

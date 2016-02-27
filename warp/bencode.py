@@ -76,7 +76,7 @@ def encode(struct):
 
 
 def _encode(struct):
-    """ Encoding structure to bencoded bytestring """
+    """ Encode structure to bencoded bytestring """
     if isinstance(struct, dict):
         res = b''
         for key, value in sorted(struct.items(), key=lambda x: x[0]):
@@ -91,24 +91,3 @@ def _encode(struct):
 
     elif isinstance(struct, int):
         return b'i%de' % struct
-
-
-if __name__ == '__main__':
-    assert decode(b'0:') == b''
-    assert decode(b'5:Hello') == b'Hello'
-    assert decode(b'12:Hello World!') == b'Hello World!'
-    assert decode(b'i42e') == 42
-    assert decode(b'i-1e') == -1
-    assert decode(b'l5:helloe') == [b'hello']
-    assert decode(b'l5:hello5:worlde') == [b'hello', b'world']
-    assert decode(b'd5:hello5:world2:hil5:hello5:worldee') == {b'hello': b'world', b'hi': [b'hello', b'world']}
-    assert decode(b'd5:hello5:world2:hil5:hello5:worlde3:hi2l5:hello5:worldee') == {b'hello': b'world', b'hi2': [b'hello', b'world'], b'hi': [b'hello', b'world']}
-
-    assert encode(b'') == b'0:'
-    assert encode(b'Hello') == b'5:Hello'
-    assert encode(42) == b'i42e'
-    assert encode(-1) == b'i-1e'
-    assert encode([b'hello']) == b'l5:helloe'
-    assert encode([b'hello', b'world']) == b'l5:hello5:worlde'
-    assert encode({b'hello': b'world', b'hi': [b'hello', b'world']}) == b'd5:hello5:world2:hil5:hello5:worldee'
-    assert encode({b'hello': b'world', b'hi2': [b'hello', b'world'], b'hi': [b'hello', b'world']}) == b'd5:hello5:world2:hil5:hello5:worlde3:hi2l5:hello5:worldee'

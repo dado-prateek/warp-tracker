@@ -1,7 +1,7 @@
 """ Base classes """
 
 import logging
-from warp import lib
+from warp.lib import Singleton
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -9,7 +9,7 @@ logger.setLevel(logging.DEBUG)
 INIT = 'initialization'
 
 
-class Server(object, metaclass=lib.Singleton):
+class Server(object, metaclass=Singleton):
     """ Base server class """
     def __init__(self):
         self.state = INIT
@@ -20,4 +20,4 @@ class Server(object, metaclass=lib.Singleton):
 
     def serve(self):
         """ run server """
-        return NotImplemented
+        raise NotImplementedError
