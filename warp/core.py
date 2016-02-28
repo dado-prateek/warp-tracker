@@ -77,7 +77,7 @@ class WarpCore(metaclass=Singleton):
         if 'ANNOUNCE_URL' in self.cfg:
             url = self.cfg['ANNOUNCE_URL'].encode('utf-8')
             torrent.metafile.meta_data[b'announce'] = url
-            return torrent
+        return torrent
 
     def announce(self, params):
         """ Announce response. Returns bencoded dictionary """
