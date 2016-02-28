@@ -45,6 +45,8 @@ class AnnounceRequest(ServerRequest):
             'info_hash': self.query[b'info_hash'][0],
             'host': self.host.encode('utf-8'),
             'port': self.query[b'port'][0],
+            'left': self.query[b'left'][0],
+            'compact': self.query[b'compact'][0]
         }
         content_type = 'text/plain'
         return content_type, self.core.announce(params)

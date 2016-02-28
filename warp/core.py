@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-class NoTorrentFound(Exception):
-    """ Exception when no torrent found """
+class InfoHashNotFound(Exception):
+    """ Exception when no torrent found for giving info_hash"""
     pass
 
 
@@ -23,14 +23,14 @@ class WarpCore(metaclass=Singleton):
         super().__init__()
         self.cfg = cfg
         self.hashes_torrents = {}
-        logger.info('Loaded %i torrents', len(self.hashes_torrents))
-        logger.debug(self.hashes_torrents)
 
     def load_torrents(self):
         """ Loading torrents from files """
+        logger.info('Loading torrents from %s', self.cfg['TORRENTS_DIR'])
         for file_path in find_files(self.cfg['TORRENTS_DIR']):
             torrent = Torrent.init_from_file(file_path)
             self.add_hash_torrent(torrent.info_hash, torrent)
+        logger.info('Loaded %i torrents', len(self.hashes_torrents))
 
     def add_hash_torrent(self, info_hash, torrent):
         """ Serve torrent """
@@ -39,42 +39,42 @@ class WarpCore(metaclass=Singleton):
             self.hashes_torrents[info_hash] = torrent
 
     def get_torrents(self):
-        """ Return serving torrent iterable """
+        """ Return serving torrents view """
         return self.hashes_torrents.values()
 
     def get_torrent_by_hash(self, info_hash):
         """ Return torent by info hash """
-        return self.hashes_torrents[info_hash]
-
-    def add_peer_for_hash(self, info_hash, peer):
-        """ Adds peer and requested info_hash to database """
-        self.get_torrent_by_hash(info_hash).add_peer(peer)
-
-    def get_peers_for_hash(self, info_hash):
-        """ Returns list of peers for given hash """
-        return self.get_torrent_by_hash(info_hash).get_peers()
+        try:
+            return self.hashes_torrents[info_hash]
+        except KeyError:
+            msg = 'Torrent not found for info_hash {}'.format(info_hash)
+            logger.info(msg)
+            raise InfoHashNotFound(msg)
 
     def announce(self, params):
         """ Announce response. Returns bencoded dictionary """
-        peer = Peer(peer_id=params['peer_id'],
-                    host=params['host'],
-                    port=params['port'])
+        peer = Peer(params)
 
         info_hash = params['info_hash']
-        if info_hash in self.hashes_torrents:
-            self.add_peer_for_hash(info_hash, peer)
-            peers = self.get_peers_for_hash(info_hash)
+        try:
+            torrent = self.get_torrent_by_hash(info_hash)
+            torrent.add_peer(peer)
+            peers = torrent.get_peers()
             response = {
                 b'interval': 60,
-                b'tracker id': b'WarpTracker',
-                b'complete': 0,
-                b'incomplete': len(peers),
-                b'peers': [p.as_bytes_dict for p in peers]
+                # b'tracker id': b'WarpTracker',
+                # b'complete': len([p for p in peers if p.is_seeder]),
+                # b'incomplete': len([p for p in peers if p.is_leecher]),
+                b'peers': b''.join([p.as_bytes_compact for p in peers])
             }
-            logger.debug('Response: %s', response)
-            return bencode.encode(response)
-        else:
-            logger.warning('Unknown info_hash: %s', info_hash)
+        except InfoHashNotFound:
+            response = {
+                b'failure reason': b'Torrent not registered',
+                b'failure code': 200
+            }
+
+        logger.debug('Response: %s', bencode.encode(response))
+        return bencode.encode(response)
 
 
 class Torrent(object):
@@ -85,11 +85,6 @@ class Torrent(object):
         self.peers = set()
         logger.debug('Init %s', self)
 
-    @property
-    def info(self):
-        """ Decoded info block from the meta file """
-        return self.metafile.meta_info[b'info']
-
     def add_peer(self, peer):
         """ Add peer to torrent """
         self.peers.add(peer)
@@ -99,10 +94,8 @@ class Torrent(object):
         return self.peers
 
     def create_info_hash(self):
-        """ Gets info_hash from torrent """
-        hasher = hashlib.sha1()
-        hasher.update(bencode.encode(self.info))
-        return hasher.digest()
+        """ Creating info_hash from bencoded info block from metafile """
+        return hash_sha1(self.metafile.bencoded_info)
 
     @classmethod
     def init_from_file(cls, path):
@@ -118,21 +111,26 @@ class TorrentMetaFile(object):
     def __init__(self, path):
         self.path = path
         self.file_name = os.path.basename(path)
-        self.meta_info = self.read_meta_info()
+        self.meta_data = self.read_meta_data()
         logger.debug('Init %s', self)
-        logger.debug("meta_info: %s", self.meta_info)
+        logger.debug("meta_data: %s", self.meta_data)
 
     def dump_to_file(self):
         """ Save meta_info to a file """
         pass
 
-    def read_meta_info(self):
+    @property
+    def bencoded_info(self):
+        """ Bencoded info block """
+        return bencode.encode(self.meta_data[b'info'])
+
+    def read_meta_data(self):
         """ Read torrent info from path """
         try:
             with open(self.path, 'rb') as file:
                 return bencode.decode(file.read())
         except FileNotFoundError:
-            logger.warning("File does not exists")
+            logger.error("File does not exists")
 
     def __repr__(self):
         return 'TorrentMetaFile({})'.format(self.path)
@@ -140,27 +138,38 @@ class TorrentMetaFile(object):
 
 class Peer(object):
     """ Peer object """
-    def __init__(self, peer_id, host, port):
+    def __init__(self, params):
+        self.peer_id = params['peer_id']
+        self.host = params['host']
+        self.port = int(params['port'])
+        self.left = int(params['left'])
+        self.compact = int(params['compact'])
         self.last_seen = datetime.datetime.now()
-        self.peer_id = peer_id
-        self.host = host
-        self.port = port
-        self.info_hashes = set()
         logger.debug('Init %s', self)
 
     @property
     def as_bytes_dict(self):
         """ Returns peer dictionary model for announce response """
         return {
-            b'peer_id': self.peer_id,
+            b'peer id': self.peer_id,
             b'ip': self.host,
             b'port': self.port
         }
 
     @property
+    def as_bytes_compact(self):
+        ip = ip4_to_4bytes(self.host)
+        port = port_to_2bytes(self.port)
+        return ip + port
+
+    @property
     def is_seeder(self):
         """ Check if peer is seeder """
-        return False
+        return self.left == 0
+
+    def is_leecher(self):
+        """ Check if peer is leecher """
+        return not self.is_seeder
 
     @property
     def alive(self):
@@ -170,6 +179,12 @@ class Peer(object):
 
     def __repr__(self):
         return 'Peer({}, {}, {})'.format(self.peer_id, self.host, self.port)
+
+    def __hash__(self):
+        return int.from_bytes(self.as_bytes_compact, 'big')
+
+    def __eq__(self, other):
+        return self.host == other.host and self.port == other.port
 
 
 def find_files(dir_path):
@@ -182,3 +197,21 @@ def find_files(dir_path):
 
     file_paths = [os.path.join(dir_path, p) for p in file_names]
     return file_paths
+
+
+def hash_sha1(byte_str):
+    """ Return sha1 hash of byte string """
+    sha1 = hashlib.sha1()
+    sha1.update(byte_str)
+    return sha1.digest()
+
+
+def ip4_to_4bytes(ip_byte_str):
+    """ Convert ipv4 string to 4-byte """
+    octets = ip_byte_str.split(b'.')
+    return b''.join([int(x).to_bytes(1, 'big') for x in octets])
+
+
+def port_to_2bytes(port_num):
+    """ Convert int ro 2 bytes """
+    return port_num.to_bytes(2, 'big')
