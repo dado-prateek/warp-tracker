@@ -1,6 +1,7 @@
 import unittest
 
-from warp.core import WarpCore, Torrent
+from warp.core import WarpCore, Torrent, ip4_to_4bytes, port_to_2bytes
+from warp.core import Peer
 from warp.config import cfg
 
 
@@ -64,3 +65,45 @@ class TestTorrent(unittest.TestCase):
 
     def test_repr(self):
         self.assertEqual(repr(self.torrent), 'Torrent(Metafile(path))')
+
+
+class TestPeer(unittest.TestCase):
+    def setUp(self):
+        self.params = {
+            'peer_id': b'peer_id',
+            'info_hash': b'info_hash',
+            'host': b'127.0.0.1',
+            'port': b'666',
+            'left': b'0',
+            'compact': b'1'
+        }
+
+    def test_equality(self):
+        """ Peers are equal when host and port is equal """
+        peer = Peer(self.params)
+        equal_peer = Peer(self.params)
+        self.assertEqual(peer, equal_peer)
+
+        params_mod = self.params
+        params_mod['host'] = b'1'
+        unequal_host_peer = Peer(params_mod)
+        self.assertNotEqual(peer, unequal_host_peer)
+
+        params_mod = self.params
+        params_mod['port'] = b'1'
+        unequal_port_peer = Peer(params_mod)
+        self.assertNotEqual(peer, unequal_port_peer)
+
+    def test_hash(self):
+        peer1 = Peer(self.params)
+        peer2 = Peer(self.params)
+        peer_set = {peer1, peer2}
+        self.assertEqual(len(peer_set), 1)
+
+
+class TestFuncts(unittest.TestCase):
+    def test_ip4_to_4byte(self):
+        self.assertEqual(ip4_to_4bytes(b'46.163.130.47'), b'.\xa3\x82/')
+
+    def test_port_to_2byte(self):
+        self.assertEqual(port_to_2bytes(59568), b'\xe8\xb0')
