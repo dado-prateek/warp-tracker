@@ -158,9 +158,10 @@ class Peer(object):
 
     @property
     def as_bytes_compact(self):
-        ip = ip4_to_4bytes(self.host)
+        """ Return peer in compact mode """
+        ip_addr = ip4_to_4bytes(self.host)
         port = port_to_2bytes(self.port)
-        return ip + port
+        return ip_addr + port
 
     @property
     def is_seeder(self):
