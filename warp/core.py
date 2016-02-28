@@ -17,6 +17,11 @@ class InfoHashNotFound(Exception):
     pass
 
 
+class TorrentNotFound(Exception):
+    """ Raise when torrent not found """
+    pass
+
+
 class WarpCore(metaclass=Singleton):
     """ Core of tracker """
     def __init__(self, cfg):
@@ -58,7 +63,21 @@ class WarpCore(metaclass=Singleton):
             raise InfoHashNotFound(msg)
 
     def get_torrent_by_file_name(self, file_name):
-        return [x for x in self.torrents if x.metafile.file_name == file_name][0]
+        """ Return torrent by filename """
+        for torr in self.torrents:
+            if torr.metafile.file_name == file_name:
+                torrent = torr
+                break
+        else:
+            raise TorrentNotFound(file_name)
+        return torrent
+
+    def fix_announce_url(self, torrent):
+        """ Replace announce url in torrent to current tracker url """
+        if 'ANNOUNCE_URL' in self.cfg:
+            url = self.cfg['ANNOUNCE_URL'].encode('utf-8')
+            torrent.metafile.meta_data[b'announce'] = url
+            return torrent
 
     def announce(self, params):
         """ Announce response. Returns bencoded dictionary """
@@ -132,7 +151,7 @@ class TorrentMetaFile(object):
     @property
     def bencoded_meta_data(self):
         return bencode.encode(self.meta_data)
-
+    
     @property
     def bencoded_info(self):
         """ Bencoded info block """

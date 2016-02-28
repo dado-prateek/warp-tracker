@@ -87,6 +87,7 @@ class TorrentRequest(ServerRequest):
             raise Exception('Wrong path: {}'.format(self.request.path))
         file_name = elems[-1]
         torrent = self.core.get_torrent_by_file_name(file_name)
+        torrent = self.core.fix_announce_url(torrent)
         return 'application/x-bittorrent', torrent.metafile.bencoded_meta_data
 
 
@@ -102,7 +103,6 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
     def register_server_request(self, request_cls, url):
         """ Register server request """
         self.requests[url] = request_cls
-        logger.debug(self.requests)
 
     def answer(self):
         """ Answer to requested path """
@@ -115,7 +115,6 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
         """ Find suitable request handler based on path """
         try:
             base_url = '/{}'.format(request.path.split('/')[1])
-            logger.debug(base_url)
             return self.requests[base_url]
         except KeyError:
             return UnknownRequest
