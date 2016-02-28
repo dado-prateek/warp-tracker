@@ -23,12 +23,14 @@ class WarpCore(metaclass=Singleton):
         super().__init__()
         self.cfg = cfg
         self.hashes_torrents = {}
+        self.torrents = set()
 
     def load_torrents(self):
         """ Loading torrents from files """
         logger.info('Loading torrents from %s', self.cfg['TORRENTS_DIR'])
         for file_path in find_files(self.cfg['TORRENTS_DIR']):
             torrent = Torrent.init_from_file(file_path)
+            self.add_torrent(torrent)
             self.add_hash_torrent(torrent.info_hash, torrent)
         logger.info('Loaded %i torrents', len(self.hashes_torrents))
 
@@ -37,6 +39,10 @@ class WarpCore(metaclass=Singleton):
         logger.debug('Add torrent %s', torrent)
         if info_hash not in self.hashes_torrents:
             self.hashes_torrents[info_hash] = torrent
+
+    def add_torrent(self, torrent):
+        """ Add torrent to list """
+        self.torrents.add(torrent)
 
     def get_torrents(self):
         """ Return serving torrents view """
@@ -50,6 +56,9 @@ class WarpCore(metaclass=Singleton):
             msg = 'Torrent not found for info_hash {}'.format(info_hash)
             logger.info(msg)
             raise InfoHashNotFound(msg)
+
+    def get_torrent_by_file_name(self, file_name):
+        return [x for x in self.torrents if x.metafile.file_name == file_name][0]
 
     def announce(self, params):
         """ Announce response. Returns bencoded dictionary """
@@ -87,6 +96,7 @@ class Torrent(object):
 
     def add_peer(self, peer):
         """ Add peer to torrent """
+        self.peers.discard(peer)
         self.peers.add(peer)
 
     def get_peers(self):
@@ -118,6 +128,10 @@ class TorrentMetaFile(object):
     def dump_to_file(self):
         """ Save meta_info to a file """
         pass
+
+    @property
+    def bencoded_meta_data(self):
+        return bencode.encode(self.meta_data)
 
     @property
     def bencoded_info(self):

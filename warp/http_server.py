@@ -12,32 +12,48 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
+PAGE_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8"/>
+        <title>Warp Tracker</title>
+    </head>
+    <body>
+    <div class="container" style="width: 50%; margin: 30px auto; font-family: verdana,sans-serif;">
+        <h1>Welcome to Warp Torrent Tracker</h1>
+        {}
+    </div>
+    </body>
+</html>
+"""
+
+
 class ServerRequest(object):
     """ Server request handlers class """
-    request_url = NotImplemented
 
     def __init__(self, request, host):
         self.core = WarpCore(warp.config.cfg)
         self.request = request
         self.host = host
         self.query = parse_qs_to_bytes(self.request.query)
-        super().__init__()
-        logger.debug('Query %s', self.query)
+        logger.debug('%s query %s', self, self.query)
 
     def process(self):
         """ Process request method """
         raise NotImplementedError
 
+    def __str__(self):
+        return '{}()'.format(self.__class__.__name__)
+
 
 class UnknownRequest(ServerRequest):
     """ Process unknown requests. Generally return 404 """
     def process(self):
-        return 'text/plain', bytes('Unknown request', 'utf-8')
+        return 'text/plain', 'Unknown request'
 
 
 class AnnounceRequest(ServerRequest):
     """ Announce request """
-    request_url = '/announce'
 
     def process(self):
         params = {
@@ -52,16 +68,41 @@ class AnnounceRequest(ServerRequest):
         return content_type, self.core.announce(params)
 
 
+class TorrentListRequest(ServerRequest):
+    """ Torrent list request """
+
+    def process(self):
+        f_names = [x.metafile.file_name for x in self.core.get_torrents()]
+        links = ['<a href="/files/{0}">{0}</a>'.format(x) for x in f_names]
+        page = PAGE_TEMPLATE.format('<br /><br />'.join(links))
+        return 'text/html', page
+
+
+class TorrentRequest(ServerRequest):
+    """ Return torrent Metafile to user """
+
+    def process(self):
+        elems = self.request.path.split('/')
+        if len(elems) != 3:
+            raise Exception('Wrong path: {}'.format(self.request.path))
+        file_name = elems[-1]
+        torrent = self.core.get_torrent_by_file_name(file_name)
+        return 'application/x-bittorrent', torrent.metafile.bencoded_meta_data
+
+
 class HTTPRequestHandler(BaseHTTPRequestHandler):
     """ BaseHTTPRequestHandler subclass """
     def __init__(self, request, client_address, server):
         self.requests = {}
-        self.register_server_request(AnnounceRequest)
+        self.register_server_request(AnnounceRequest, '/announce')
+        self.register_server_request(TorrentListRequest, '/')
+        self.register_server_request(TorrentRequest, '/files')
         super().__init__(request, client_address, server)
 
-    def register_server_request(self, request_cls):
+    def register_server_request(self, request_cls, url):
         """ Register server request """
-        self.requests[request_cls.request_url] = request_cls
+        self.requests[url] = request_cls
+        logger.debug(self.requests)
 
     def answer(self):
         """ Answer to requested path """
@@ -73,7 +114,9 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
     def get_request_handler(self, request):
         """ Find suitable request handler based on path """
         try:
-            return self.requests[request.path]
+            base_url = '/{}'.format(request.path.split('/')[1])
+            logger.debug(base_url)
+            return self.requests[base_url]
         except KeyError:
             return UnknownRequest
 
