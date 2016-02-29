@@ -11,6 +11,7 @@ from warp.base import Server
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+MAX_VALUE_LENGTH = 20
 
 PAGE_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
@@ -30,7 +31,6 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 
 class ServerRequest(object):
     """ Server request handlers class """
-
     def __init__(self, request, host):
         self.core = WarpCore(warp.config.cfg)
         self.request = request
@@ -54,15 +54,14 @@ class UnknownRequest(ServerRequest):
 
 class AnnounceRequest(ServerRequest):
     """ Announce request """
-
     def process(self):
         params = {
-            'peer_id': self.query[b'peer_id'][0],
-            'info_hash': self.query[b'info_hash'][0],
-            'host': self.host.encode('utf-8'),
-            'port': self.query[b'port'][0],
-            'left': self.query[b'left'][0],
-            'compact': self.query[b'compact'][0]
+            'peer_id': trim(self.query[b'peer_id'][0]),
+            'info_hash': trim(self.query[b'info_hash'][0]),
+            'host': trim(self.host.encode('utf-8')),
+            'port': trim(self.query[b'port'][0]),
+            'left': trim(self.query[b'left'][0]),
+            'compact': trim(self.query[b'compact'][0]),
         }
         content_type = 'text/plain'
         return content_type, self.core.announce(params)
@@ -70,9 +69,8 @@ class AnnounceRequest(ServerRequest):
 
 class TorrentListRequest(ServerRequest):
     """ Torrent list request """
-
     def process(self):
-        f_names = [x.metafile.file_name for x in self.core.get_torrents()]
+        f_names = [x.file_name for x in self.core.get_torrents()]
         links = ['<a href="/files/{0}">{0}</a>'.format(x) for x in f_names]
         page = PAGE_TEMPLATE.format('<br /><br />'.join(links))
         return 'text/html', page
@@ -80,22 +78,20 @@ class TorrentListRequest(ServerRequest):
 
 class TorrentRequest(ServerRequest):
     """ Return torrent Metafile to user """
-
     def process(self):
         elems = self.request.path.split('/')
         if len(elems) != 3:
             raise Exception('Wrong path: {}'.format(self.request.path))
         file_name = elems[-1]
         torrent = self.core.get_torrent_by_file_name(file_name)
-        torrent = self.core.fix_announce_url(torrent)
-        return 'application/x-bittorrent', torrent.metafile.bencoded_meta_data
+        return 'application/x-bittorrent', torrent.get_meta_file_content()
 
 
 class HTTPRequestHandler(BaseHTTPRequestHandler):
     """ BaseHTTPRequestHandler subclass """
     def __init__(self, request, client_address, server):
         self.requests = {}
-        self.register_server_request(AnnounceRequest, '/announce')
+        self.register_server_request(AnnounceRequest, announce_path())
         self.register_server_request(TorrentListRequest, '/')
         self.register_server_request(TorrentRequest, '/files')
         super().__init__(request, client_address, server)
@@ -136,7 +132,7 @@ class WarpHTTPServer(Server):
 
     def serve(self):
         try:
-            params = (self.cfg['BIND_ADDR'], self.cfg['PORT'])
+            params = (self.cfg['bind_addr'], self.cfg['port'])
             logger.info('Starting http server on %s:%s', *params)
             http_server = HTTPServer(params, HTTPRequestHandler)
             http_server.serve_forever()
@@ -235,3 +231,16 @@ def response_to_bytes(string):
             return string
     else:
         return bytes()
+
+
+def trim(value):
+    """ Trim value for safety """
+    if len(value) > MAX_VALUE_LENGTH:
+        return value[:MAX_VALUE_LENGTH]
+    else:
+        return value
+
+
+def announce_path():
+    announce_url = warp.config.cfg['announce_url']
+    return urlparse(announce_url).path

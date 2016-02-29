@@ -32,9 +32,15 @@ class WarpCore(metaclass=Singleton):
 
     def load_torrents(self):
         """ Loading torrents from files """
-        logger.info('Loading torrents from %s', self.cfg['TORRENTS_DIR'])
-        for file_path in find_files(self.cfg['TORRENTS_DIR']):
+        torrents_dir = self.cfg['torrents_dir']
+        logger.info('Loading torrents from %s', torrents_dir)
+        for file_path in find_files(torrents_dir):
             torrent = Torrent.init_from_file(file_path)
+
+            if self.cfg['patch_announce_url']:
+                url = self.cfg['announce_url'].encode('utf-8')
+                torrent.patch_announce_url(url)
+
             self.add_torrent(torrent)
             self.add_hash_torrent(torrent.info_hash, torrent)
         logger.info('Loaded %i torrents', len(self.hashes_torrents))
@@ -65,18 +71,11 @@ class WarpCore(metaclass=Singleton):
     def get_torrent_by_file_name(self, file_name):
         """ Return torrent by filename """
         for torr in self.torrents:
-            if torr.metafile.file_name == file_name:
+            if torr.file_name == file_name:
                 torrent = torr
                 break
         else:
             raise TorrentNotFound(file_name)
-        return torrent
-
-    def fix_announce_url(self, torrent):
-        """ Replace announce url in torrent to current tracker url """
-        if 'ANNOUNCE_URL' in self.cfg:
-            url = self.cfg['ANNOUNCE_URL'].encode('utf-8')
-            torrent.metafile.meta_data[b'announce'] = url
         return torrent
 
     def announce(self, params):
@@ -107,8 +106,9 @@ class WarpCore(metaclass=Singleton):
 
 class Torrent(object):
     """ Torrent object """
-    def __init__(self, metafile):
-        self.metafile = metafile
+    def __init__(self, meta_file):
+        self._meta_file = meta_file
+        self.file_name = meta_file.file_name
         self.info_hash = self.create_info_hash()
         self.peers = set()
         logger.debug('Init %s', self)
@@ -124,19 +124,27 @@ class Torrent(object):
 
     def create_info_hash(self):
         """ Creating info_hash from bencoded info block from metafile """
-        return hash_sha1(self.metafile.bencoded_info)
+        return hash_sha1(self._meta_file.bencoded_info)
 
     @classmethod
     def init_from_file(cls, path):
         """ Init torrent from file path """
         return cls(TorrentMetaFile(path))
 
+    def patch_announce_url(self, url):
+        """ Replace announce url in torrent to url """
+        self._meta_file.meta_data[b'announce'] = url
+
+    def get_meta_file_content(self):
+        """ Returns metafile content in bytes"""
+        return self._meta_file.bencoded_meta_data
+
     def __repr__(self):
-        return 'Torrent({})'.format(self.metafile)
+        return 'Torrent({})'.format(self._meta_file)
 
 
 class TorrentMetaFile(object):
-    """ Class represents torrent metafile """
+    """ Class represents torrent meta file """
     def __init__(self, path):
         self.path = path
         self.file_name = os.path.basename(path)
@@ -150,8 +158,9 @@ class TorrentMetaFile(object):
 
     @property
     def bencoded_meta_data(self):
+        """ Return meta file content """
         return bencode.encode(self.meta_data)
-    
+
     @property
     def bencoded_info(self):
         """ Bencoded info block """
@@ -166,7 +175,7 @@ class TorrentMetaFile(object):
             logger.error("File does not exists")
 
     def __repr__(self):
-        return 'TorrentMetaFile({})'.format(self.path)
+        return 'TorrentMetaFile("{}")'.format(self.path)
 
 
 class Peer(object):
