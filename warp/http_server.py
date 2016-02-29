@@ -110,8 +110,8 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
     def get_request_handler(self, request):
         """ Find suitable request handler based on path """
         try:
-            base_url = '/{}'.format(request.path.split('/')[1])
-            return self.requests[base_url]
+            root_path = '/{}'.format(request.path.split('/')[1])
+            return self.requests[root_path]
         except KeyError:
             return UnknownRequest
 
