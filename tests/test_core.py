@@ -32,6 +32,7 @@ class TestTorrent(unittest.TestCase):
         class MockTorrentMetaFile(object):
             def __init__(self, path):
                 self.path = path
+                self.file_name = 'file_name'
                 self.meta_data = {b'info': b'info'}
                 self.bencoded_info = b'bencoded_info'
 
