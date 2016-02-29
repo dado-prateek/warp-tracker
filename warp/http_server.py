@@ -242,5 +242,6 @@ def trim(value):
 
 
 def announce_path():
+    """ Get announce path from config """
     announce_url = warp.config.cfg['announce_url']
     return urlparse(announce_url).path
