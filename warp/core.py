@@ -88,7 +88,7 @@ class WarpCore(metaclass=Singleton):
             torrent.add_peer(peer)
             peers = torrent.get_peers()
             response = {
-                b'interval': 60,
+                b'interval': self.cfg['check_interval'],
                 # b'tracker id': b'WarpTracker',
                 # b'complete': len([p for p in peers if p.is_seeder]),
                 # b'incomplete': len([p for p in peers if p.is_leecher]),
